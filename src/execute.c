@@ -1,23 +1,25 @@
 
 
+
+
+
 #include "shell.h"
 
-int execute_command(char** argv) {
-    pid_t pid = fork();
+int execute(char* arglist[]) {
+    int status;
+    pid_t cpid = fork();
 
-    if (pid < 0) {
-        perror("fork failed");
-        return -1;
+    switch (cpid) {
+        case -1:
+            perror("fork failed");
+            exit(1);
+        case 0:
+            signal(SIGINT, SIG_DFL);
+            execvp(arglist[0], arglist);
+            perror("Command not found");
+            exit(1);
+        default:
+            waitpid(cpid, &status, 0);
+            return 0;
     }
-
-    if (pid == 0) {
-        execvp(argv[0], argv);
-        perror("myshell");
-        exit(1);
-    } else {
-        int status;
-        waitpid(pid, &status, 0);
-    }
-
-    return 0;
 }
