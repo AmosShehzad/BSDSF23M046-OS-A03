@@ -1,8 +1,5 @@
 
 
-
-
-
 CC       = gcc
 CFLAGS   = -Wall -Wextra -g -Iinclude
 SRC      = src/main.c src/shell.c src/execute.c
