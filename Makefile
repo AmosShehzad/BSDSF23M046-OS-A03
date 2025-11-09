@@ -2,6 +2,7 @@
 
 
 
+
 CC       = gcc
 CFLAGS   = -Wall -Wextra -g -Iinclude
 SRC      = src/main.c src/shell.c src/execute.c
@@ -12,7 +13,7 @@ all: $(BIN)
 
 $(BIN): $(OBJ)
 	@mkdir -p bin
-	$(CC) $(OBJ) -o $(BIN) $(LIBS)
+	$(CC) $(OBJ) -o $(BIN)
 
 obj/%.o: src/%.c
 	@mkdir -p obj
