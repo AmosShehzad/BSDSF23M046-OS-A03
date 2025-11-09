@@ -2,63 +2,100 @@
 
 #include "shell.h"
 
-char* read_cmd(char* prompt, FILE* fp) {
+/* -------------------- Read User Input -------------------- */
+char* get_command(const char* prompt, FILE* stream) {
     printf("%s", prompt);
-    char* cmdline = (char*) malloc(sizeof(char) * MAX_LEN);
-    int c, pos = 0;
+    fflush(stdout);
 
-    while ((c = getc(fp)) != EOF) {
-        if (c == '\n') break;
-        cmdline[pos++] = c;
+    char* line = malloc(MAX_INPUT);
+    if (!line) {
+        perror("malloc");
+        exit(1);
     }
 
-    if (c == EOF && pos == 0) {
-        free(cmdline);
-        return NULL; // Handle Ctrl+D
+    int ch, pos = 0;
+    while ((ch = fgetc(stream)) != EOF && ch != '\n') {
+        if (pos < MAX_INPUT - 1)
+            line[pos++] = ch;
     }
-    
-    cmdline[pos] = '\0';
-    return cmdline;
+
+    if (ch == EOF && pos == 0) {
+        free(line);
+        return NULL;   // Ctrl+D
+    }
+
+    line[pos] = '\0';
+    return line;
 }
 
-char** tokenize(char* cmdline) {
-    // Edge case: empty command line
-    if (cmdline == NULL || cmdline[0] == '\0' || cmdline[0] == '\n') {
+/* -------------------- Tokenize Input -------------------- */
+char** parse_input(char* cmdline) {
+    if (!cmdline || cmdline[0] == '\0') return NULL;
+
+    char** args = malloc(sizeof(char*) * (MAX_ARGS + 1));
+    if (!args) {
+        perror("malloc");
+        exit(1);
+    }
+
+    for (int i = 0; i < MAX_ARGS + 1; i++) {
+        args[i] = malloc(ARG_LEN);
+        memset(args[i], 0, ARG_LEN);
+    }
+
+    int arg_count = 0;
+    char* token = strtok(cmdline, " \t");
+    while (token != NULL && arg_count < MAX_ARGS) {
+        strncpy(args[arg_count++], token, ARG_LEN - 1);
+        token = strtok(NULL, " \t");
+    }
+
+    if (arg_count == 0) {
+        for (int i = 0; i < MAX_ARGS + 1; i++) free(args[i]);
+        free(args);
         return NULL;
     }
 
-    char** arglist = (char**)malloc(sizeof(char*) * (MAXARGS + 1));
-    for (int i = 0; i < MAXARGS + 1; i++) {
-        arglist[i] = (char*)malloc(sizeof(char) * ARGLEN);
-        bzero(arglist[i], ARGLEN);
+    args[arg_count] = NULL;
+    return args;
+}
+
+/* -------------------- Handle Built-in Commands -------------------- */
+int handle_builtin(char** argv) {
+    if (argv == NULL || argv[0] == NULL)
+        return 0;
+
+    // exit
+    if (strcmp(argv[0], "exit") == 0) {
+        printf("Goodbye!\n");
+        exit(0);
     }
 
-    char* cp = cmdline;
-    char* start;
-    int len;
-    int argnum = 0;
-
-    while (*cp != '\0' && argnum < MAXARGS) {
-        while (*cp == ' ' || *cp == '\t') cp++; // Skip leading whitespace
-        
-        if (*cp == '\0') break; // Line was only whitespace
-
-        start = cp;
-        len = 1;
-        while (*++cp != '\0' && !(*cp == ' ' || *cp == '\t')) {
-            len++;
-        }
-        strncpy(arglist[argnum], start, len);
-        arglist[argnum][len] = '\0';
-        argnum++;
+    // cd
+    if (strcmp(argv[0], "cd") == 0) {
+        const char* path = argv[1] ? argv[1] : getenv("HOME");
+        if (chdir(path) != 0)
+            perror("cd");
+        return 1;
     }
 
-    if (argnum == 0) { // No arguments were parsed
-        for(int i = 0; i < MAXARGS + 1; i++) free(arglist[i]);
-        free(arglist);
-        return NULL;
+    // help
+    if (strcmp(argv[0], "help") == 0) {
+        printf("\n--- myshell help ---\n");
+        printf("Built-in commands:\n");
+        printf("  cd <dir>   - change directory\n");
+        printf("  help       - show this message\n");
+        printf("  exit       - exit the shell\n");
+        printf("  jobs       - list background jobs (coming soon)\n");
+        printf("---------------------\n\n");
+        return 1;
     }
 
-    arglist[argnum] = NULL;
-    return arglist;
+    // jobs placeholder
+    if (strcmp(argv[0], "jobs") == 0) {
+        printf("Job control feature not implemented yet.\n");
+        return 1;
+    }
+
+    return 0;
 }

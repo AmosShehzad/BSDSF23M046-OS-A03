@@ -2,19 +2,20 @@
 
 #include "shell.h"
 
-int main() {
+int main(void) {
     char* cmdline;
-    char** arglist;
+    char** argv;
 
-    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
-        if ((arglist = tokenize(cmdline)) != NULL) {
-            execute(arglist);
+    while ((cmdline = get_command(PROMPT, stdin)) != NULL) {
+        if ((argv = parse_input(cmdline)) != NULL) {
+            // Check if built-in command
+            if (!handle_builtin(argv))
+                execute_command(argv);
 
-            // Free the memory allocated by tokenize()
-            for (int i = 0; arglist[i] != NULL; i++) {
-                free(arglist[i]);
-            }
-            free(arglist);
+            // Free memory
+            for (int i = 0; argv[i] != NULL; i++)
+                free(argv[i]);
+            free(argv);
         }
         free(cmdline);
     }
