@@ -1,125 +1,108 @@
 
 
+
+
 #include "shell.h"
 
-static char history[MAX_HISTORY][MAX_INPUT];
+/* -------------------- MANUAL HISTORY -------------------- */
+
+static char* saved_history[HISTORY_SIZE];
 static int history_count = 0;
+static int history_next = 0;
 
-/* ----------- Read user input ----------- */
-char* get_command(const char* prompt, FILE* stream) {
-    printf("%s", prompt);
-    fflush(stdout);
+void save_command_history(const char* cmd) {
+    if (!cmd || cmd[0] == '\0') return;
+    if (saved_history[history_next]) free(saved_history[history_next]);
+    saved_history[history_next] = strdup(cmd);
+    history_next = (history_next + 1) % HISTORY_SIZE;
+    if (history_count < HISTORY_SIZE) history_count++;
+}
 
-    char* line = malloc(MAX_INPUT);
-    if (!line) { perror("malloc"); exit(1); }
-
-    int ch, pos = 0;
-    while ((ch = fgetc(stream)) != EOF && ch != '\n') {
-        if (pos < MAX_INPUT - 1)
-            line[pos++] = ch;
+void print_saved_history(void) {
+    int start = (history_count < HISTORY_SIZE) ? 0 : history_next;
+    int num = history_count;
+    for (int i = 0; i < num; ++i) {
+        int idx = (start + i) % HISTORY_SIZE;
+        printf("%3d  %s\n", i + 1, saved_history[idx]);
     }
+}
 
-    if (ch == EOF && pos == 0) {
-        free(line);
-        return NULL;
-    }
+char* get_saved_command(int n) {
+    if (n < 1 || n > history_count) return NULL;
+    int start = (history_count < HISTORY_SIZE) ? 0 : history_next;
+    int idx = (start + (n - 1)) % HISTORY_SIZE;
+    return saved_history[idx];
+}
 
-    line[pos] = '\0';
+/* -------------------- READLINE INPUT -------------------- */
+
+char* read_cmd(char* prompt, FILE* fp) {
+    (void)fp;
+    char* line = readline(prompt);
+
+    if (!line) return NULL;  // Ctrl-D
+
+    // Add to GNU Readline internal history (for ↑/↓ arrows)
     if (strlen(line) > 0)
-        save_command_history(line);
+        add_history(line);  // <— This is from <readline/history.h>
 
     return line;
 }
 
-/* ----------- Tokenize input ----------- */
-char** parse_input(char* cmdline) {
-    if (!cmdline || cmdline[0] == '\0') return NULL;
-
-    char** args = malloc(sizeof(char*) * (MAX_ARGS + 1));
-    if (!args) { perror("malloc"); exit(1); }
-
-    for (int i = 0; i < MAX_ARGS + 1; i++) {
-        args[i] = malloc(ARG_LEN);
-        memset(args[i], 0, ARG_LEN);
+/* -------------------- TOKENIZE (unchanged) -------------------- */
+char** tokenize(char* cmdline) {
+    if (cmdline == NULL || cmdline[0] == '\0') return NULL;
+    char** arglist = (char**) malloc(sizeof(char*) * (MAXARGS + 1));
+    for (int i = 0; i < MAXARGS + 1; i++) {
+        arglist[i] = (char*) malloc(sizeof(char) * ARGLEN);
+        bzero(arglist[i], ARGLEN);
     }
-
-    int arg_count = 0;
-    char* token = strtok(cmdline, " \t");
-    while (token != NULL && arg_count < MAX_ARGS) {
-        strncpy(args[arg_count++], token, ARG_LEN - 1);
-        token = strtok(NULL, " \t");
+    char* cp = cmdline;
+    int argnum = 0;
+    while (*cp != '\0' && argnum < MAXARGS) {
+        while (*cp == ' ' || *cp == '\t') cp++;
+        if (*cp == '\0') break;
+        char* start = cp;
+        int len = 1;
+        while (*++cp != '\0' && !(*cp == ' ' || *cp == '\t')) len++;
+        strncpy(arglist[argnum], start, len);
+        arglist[argnum][len] = '\0';
+        argnum++;
     }
-
-    if (arg_count == 0) {
-        for (int i = 0; i < MAX_ARGS + 1; i++) free(args[i]);
-        free(args);
+    if (argnum == 0) {
+        for (int i = 0; i < MAXARGS + 1; i++) free(arglist[i]);
+        free(arglist);
         return NULL;
     }
-
-    args[arg_count] = NULL;
-    return args;
+    arglist[argnum] = NULL;
+    return arglist;
 }
 
-/* ----------- Built-in Commands ----------- */
-int handle_builtin(char** argv) {
-    if (argv == NULL || argv[0] == NULL)
-        return 0;
+/* -------------------- BUILTINS -------------------- */
+int handle_builtin(char** arglist) {
+    if (!arglist || !arglist[0]) return 0;
 
-    if (strcmp(argv[0], "exit") == 0) {
-        printf("Goodbye!\n");
+    if (strcmp(arglist[0], "exit") == 0) {
+        printf("Exiting shell...\n");
         exit(0);
     }
-
-    if (strcmp(argv[0], "cd") == 0) {
-        const char* path = argv[1] ? argv[1] : getenv("HOME");
-        if (chdir(path) != 0)
-            perror("cd");
+    else if (strcmp(arglist[0], "cd") == 0) {
+        if (!arglist[1]) {
+            char* home = getenv("HOME");
+            if (!home) fprintf(stderr, "cd: HOME not set\n");
+            else if (chdir(home) != 0) perror("cd");
+        } else {
+            if (chdir(arglist[1]) != 0) perror("cd");
+        }
         return 1;
     }
-
-    if (strcmp(argv[0], "help") == 0) {
-        printf("\n--- myshell help ---\n");
-        printf("Built-in commands:\n");
-        printf("  cd <dir>\n  help\n  exit\n  history\n  jobs (upcoming)\n");
-        printf("---------------------\n\n");
+    else if (strcmp(arglist[0], "help") == 0) {
+        printf("\nBuilt-ins: cd, exit, help, history, !n\n\n");
         return 1;
     }
-
-    if (strcmp(argv[0], "history") == 0) {
-        print_history();
+    else if (strcmp(arglist[0], "history") == 0) {
+        print_saved_history();
         return 1;
     }
-
-    if (strcmp(argv[0], "jobs") == 0) {
-        printf("Job control not implemented yet.\n");
-        return 1;
-    }
-
     return 0;
-}
-
-/* ----------- History System ----------- */
-void save_command_history(const char* cmd) {
-    if (strlen(cmd) == 0) return;
-
-    if (history_count < MAX_HISTORY) {
-        strncpy(history[history_count++], cmd, MAX_INPUT);
-    } else {
-        for (int i = 1; i < MAX_HISTORY; i++)
-            strcpy(history[i - 1], history[i]);
-        strncpy(history[MAX_HISTORY - 1], cmd, MAX_INPUT);
-    }
-}
-
-void print_history(void) {
-    printf("\n--- Command History ---\n");
-    for (int i = 0; i < history_count; i++)
-        printf("%d  %s\n", i + 1, history[i]);
-    printf("------------------------\n\n");
-}
-
-char* get_saved_command(int index) {
-    if (index < 1 || index > history_count)
-        return NULL;
-    return history[index - 1];
 }
