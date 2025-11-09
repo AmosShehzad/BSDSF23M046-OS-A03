@@ -1,31 +1,38 @@
 
 
+
+
+
 #ifndef SHELL_H
 #define SHELL_H
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <signal.h>
 
-#define MAX_INPUT 512
-#define MAX_ARGS  10
-#define ARG_LEN   30
-#define MAX_HISTORY 20
+#include <readline/readline.h>
+#include <readline/history.h>
+
+#define MAX_LEN 512
+#define MAXARGS 10
+#define ARGLEN 30
 #define PROMPT "FCIT> "
+#define HISTORY_SIZE 20
 
-/* Function Prototypes */
-char* get_command(const char* prompt, FILE* stream);
-char** parse_input(char* cmdline);
-int execute_command(char** argv);
-int handle_builtin(char** argv);
+// Function prototypes
+char* read_cmd(char* prompt, FILE* fp);
+char** tokenize(char* cmdline);
+int execute(char** arglist);
+int handle_builtin(char** arglist);
 
-/* History functions */
+// Custom history functions (renamed)
 void save_command_history(const char* cmd);
-void print_history(void);
-char* get_saved_command(int index);
+void print_saved_history(void);
+char* get_saved_command(int n);
 
 #endif

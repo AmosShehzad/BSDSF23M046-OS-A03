@@ -1,36 +1,43 @@
 
 
+
+
 #include "shell.h"
 
-int main(void) {
+int main() {
     char* cmdline;
-    char** argv;
+    char** arglist;
 
-    while ((cmdline = get_command(PROMPT, stdin)) != NULL) {
-        // Handle !n (re-execute from history)
-        if (cmdline[0] == '!' && strlen(cmdline) > 1) {
-            int index = atoi(cmdline + 1);
-            char* recalled = get_saved_command(index);
-            if (recalled) {
-                printf("Re-executing: %s\n", recalled);
-                free(cmdline);
-                cmdline = strdup(recalled);
-            } else {
-                printf("No such command in history.\n");
+    signal(SIGINT, SIG_IGN);
+
+    while ((cmdline = read_cmd(PROMPT, stdin)) != NULL) {
+        if (cmdline[0] == '\0') { free(cmdline); continue; }
+
+        // Handle !n
+        if (cmdline[0] == '!') {
+            int n = atoi(cmdline + 1);
+            char* prev = get_saved_command(n);
+            if (!prev) {
+                fprintf(stderr, "No such command: %d\n", n);
                 free(cmdline);
                 continue;
             }
+            printf("Re-executing: %s\n", prev);
+            free(cmdline);
+            cmdline = strdup(prev);
         }
 
-        if ((argv = parse_input(cmdline)) != NULL) {
-            if (!handle_builtin(argv))
-                execute_command(argv);
+        // Save to our own history
+        save_command_history(cmdline);
 
-            for (int i = 0; argv[i] != NULL; i++)
-                free(argv[i]);
-            free(argv);
+        if ((arglist = tokenize(cmdline)) != NULL) {
+            if (!handle_builtin(arglist))
+                execute(arglist);
+
+            for (int i = 0; arglist[i] != NULL; i++)
+                free(arglist[i]);
+            free(arglist);
         }
-
         free(cmdline);
     }
 
